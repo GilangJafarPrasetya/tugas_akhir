@@ -1,13 +1,16 @@
 package com.example.mylocation
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.database.*
 
 class HistoryActivity : AppCompatActivity() {
+    private lateinit var dbHistory: DatabaseReference
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_history)
@@ -15,35 +18,48 @@ class HistoryActivity : AppCompatActivity() {
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbarHistory)
         toolbar.setNavigationOnClickListener { finish() }
 
-        // 1. Ambil Wadah (Container)
         val container = findViewById<LinearLayout>(R.id.llHistoryContainer)
 
-        // 2. Ambil Data dari Helper
-        val historyList = HistoryHelper.getHistoryList(this)
+        // 1. Inisialisasi Database dengan URL Singapore
+        dbHistory = FirebaseDatabase.getInstance("https://tugaspmob-16c5b-default-rtdb.asia-southeast1.firebasedatabase.app")
+            .getReference("user_history")
 
-        // 3. Cek jika data kosong
-        if (historyList.isEmpty()) {
-            // Tampilkan teks kosong jika belum ada riwayat (Opsional)
-            // (Bisa ditambahkan TextView "Belum ada riwayat" secara manual di sini)
-        }
+        // 2. Ambil data dari Firebase (Real-time)
+        dbHistory.orderByChild("waktu").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                // Bersihkan list sebelum update agar tidak terjadi duplikasi
+                container.removeAllViews()
 
-        // 4. Loop (Perulangan) untuk menampilkan setiap data
-        for (data in historyList) {
-            val namaLokasi = data.first
-            val waktuKunjungan = data.second
+                // Iterasi data dan balik urutannya agar riwayat terbaru di atas
+                val listHistory = mutableListOf<DataSnapshot>()
+                for (dataSnap in snapshot.children) {
+                    listHistory.add(dataSnap)
+                }
+                listHistory.reverse()
 
-            // Inflate (Membuat) tampilan dari item_history.xml
-            val view = LayoutInflater.from(this).inflate(R.layout.item_history, container, false)
+                for (dataSnap in listHistory) {
+                    val nama = dataSnap.child("nama").value.toString()
+                    val waktu = dataSnap.child("waktu").value.toString()
 
-            // Isi Teks
-            val tvName = view.findViewById<TextView>(R.id.tvHistoryName)
-            val tvDate = view.findViewById<TextView>(R.id.tvHistoryDate)
+                    // Inflate tampilan dari item_history.xml
+                    val view = LayoutInflater.from(this@HistoryActivity)
+                        .inflate(R.layout.item_history, container, false)
 
-            tvName.text = namaLokasi
-            tvDate.text = waktuKunjungan
+                    // Isi teks ke TextView
+                    val tvName = view.findViewById<TextView>(R.id.tvHistoryName)
+                    val tvDate = view.findViewById<TextView>(R.id.tvHistoryDate)
 
-            // Masukkan ke dalam container
-            container.addView(view)
-        }
+                    tvName.text = nama
+                    tvDate.text = waktu
+
+                    // Masukkan ke dalam container
+                    container.addView(view)
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FIREBASE_ERROR", "Gagal mengambil riwayat: ${error.message}")
+            }
+        })
     }
 }
